@@ -1,13 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-              android:orientation="vertical"
-              android:layout_width="fill_parent"
-              android:layout_height="fill_parent"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+                android:orientation="vertical"
+                android:layout_width="fill_parent"
+                android:layout_height="fill_parent"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:paddingTop="10dp"
         >
     <TextView
+            android:id="@+id/select_connection_tview"
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
-            android:text="Hello World, MainActivity"
+            android:text="Select a connection"
             />
-</LinearLayout>
+    <Spinner
+            android:id="@+id/btooth_devices_spinner"
+            android:layout_width="215dp"
+            android:layout_height="wrap_content"
+            android:layout_alignParentLeft="true"
+            android:layout_below="@id/select_connection_tview"
+            />
+    <Button
+            android:id="@+id/btooth_connect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Connect"
+            android:layout_alignParentRight="true"
+            android:layout_below="@id/select_connection_tview"
+            android:layout_toRightOf="@id/btooth_devices_spinner"
+            />
+    <Button
+            android:id="@+id/btooth_devices_scan_btn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Scan"
+            android:layout_alignParentRight="true"
+            android:layout_below="@id/btooth_devices_spinner"
+            />
+</RelativeLayout>
 
