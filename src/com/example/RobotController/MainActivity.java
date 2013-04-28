@@ -18,6 +18,7 @@ public class MainActivity extends Activity
    @Override
    public void onStart()
    {
+	  super.onStart();
       BluetoothAdapter btooth = BluetoothAdapter.getDefaultAdapter();
       if (btooth != null)
       {
