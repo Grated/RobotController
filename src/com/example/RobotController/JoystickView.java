@@ -139,6 +139,14 @@ public class JoystickView extends View implements View.OnTouchListener
             invalidate();
          }
       }
+      else if (motionEvent.getActionMasked() == MotionEvent.ACTION_UP)
+      {
+         // User took their finger off the joystick, snap it back to
+         // the middle.
+         m_inner_x = 0;
+         m_inner_y = 0;
+         invalidate();
+      }
 
       return true;
    }
