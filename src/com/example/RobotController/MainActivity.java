@@ -67,7 +67,8 @@ public class MainActivity extends Activity
       }
 
       ArrayAdapter<String> spinAdapter = new ArrayAdapter<String>(this,
-            R.id.btooth_devices_spinner, entries);
+            android.R.layout.simple_spinner_item,
+            entries);
       spin.setAdapter(spinAdapter);
    }
 
