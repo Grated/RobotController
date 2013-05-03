@@ -6,6 +6,8 @@ import android.bluetooth.BluetoothSocket;
 import android.util.Log;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.UUID;
 
 /**
@@ -107,5 +109,69 @@ public class BluetoothComms
             // doh
          }
       }
+   } // end class ConnectThread
+
+   /**
+    * This thread runs while there is an active connection with a remote
+    * device.
+    */
+   private class BluetoothConnectedThread extends Thread
+   {
+      private final BluetoothSocket mSocket;
+      private final InputStream mInStream;
+      private final OutputStream mOutStream;
+
+      public BluetoothConnectedThread(BluetoothSocket socket)
+      {
+         mSocket = socket;
+         InputStream tmp_in = null;
+         OutputStream tmp_out = null;
+
+         try
+         {
+            tmp_in = socket.getInputStream();
+            tmp_out = socket.getOutputStream();
+         }
+         catch (IOException e)
+         {
+            Log.e(TAG, "Failed to open input and output streams", e);
+         }
+
+         mInStream = tmp_in;
+         mOutStream = tmp_out;
+      }
+
+      public void run()
+      {
+         Log.i(TAG, "Beginning background bluetooth comms");
+
+         // As long as we are still connected keep listening for messages
+         // from the remote.
+      }
+
+      /**
+       * Writes data to the remote end if connected.  If no connection
+       * exists data is written to the great bit bucket in the sky.
+       */
+      public void write()
+      {
+
+      }
+
+      /**
+       * Cancels the bluetooth connection.
+       */
+      public void cancel()
+      {
+         try
+         {
+            mSocket.close();
+         }
+         catch (IOException e)
+         {
+            Log.e(TAG, "Failed to close connection in BluetoothConnectedThread", e);
+         }
+      }
+
    }
 }
