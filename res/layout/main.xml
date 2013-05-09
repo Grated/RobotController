@@ -25,6 +25,7 @@
          android:layout_width="wrap_content"
          android:layout_height="wrap_content"
          android:text="Connect"
+         android:onClick="connectClicked"
          android:layout_alignParentRight="true"
          android:layout_below="@id/select_connection_tview"
          android:layout_toRightOf="@id/btooth_devices_spinner"
@@ -36,12 +37,6 @@
          android:text="Scan"
          android:layout_alignParentRight="true"
          android:layout_below="@id/btooth_connect"
-         />
-   <com.example.RobotController.JoystickView
-         android:id="@+id/joystick_test"
-         android:layout_height="wrap_content"
-         android:layout_width="wrap_content"
-         android:layout_below="@id/btooth_devices_scan_btn"
          />
 </RelativeLayout>
 
