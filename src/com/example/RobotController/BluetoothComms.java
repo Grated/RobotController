@@ -42,13 +42,16 @@ public class BluetoothComms extends Service
    private BluetoothAcceptThread mSecureAcceptThread;
    private BluetoothConnectThread mConnectThread;
    private BluetoothConnectedThread mConnectedThread;
-   private int mState;
+   private State mState;
 
    // Constants that indicate the current connection state
-   public static final int STATE_NONE = 0;       // we're doing nothing
-   public static final int STATE_LISTEN = 1;     // now listening for incoming connections
-   public static final int STATE_CONNECTING = 2; // now initiating an outgoing connection
-   public static final int STATE_CONNECTED = 3;  // now connected to a remote device
+   public enum State
+   {
+      NONE,       // we're doing nothing
+      LISTEN,     // now listening for incoming connections
+      CONNECTING, // now initiating an outgoing connection
+      CONNECTED   // now connected to a remote device
+   }
 
    // Binder given to clients (part of being a service)
    private final Binder binder = new LocalBinder();
@@ -64,7 +67,7 @@ public class BluetoothComms extends Service
    public BluetoothComms(Context context, Handler handler)
    {
       this.mAdapter = BluetoothAdapter.getDefaultAdapter();
-      this.mState = STATE_NONE;
+      this.mState = State.NONE;
       this.mHandler = handler;
    }
 
@@ -72,18 +75,18 @@ public class BluetoothComms extends Service
     * Set the current state of the bluetooth connection.
     * @param state An integer defining the current state.
     */
-   private synchronized void setState(int state)
+   private synchronized void setState(State state)
    {
       Log.i(TAG, "setState() " + mState + " --> "+ state);
       mState = state;
-      mHandler.obtainMessage(RobotControlActivity.MESSAGE_STATE_CHANGE, state, -1).sendToTarget();
+      mHandler.obtainMessage(RobotControlActivity.MESSAGE_STATE_CHANGE, -1, -1, state).sendToTarget();
    }
 
    /**
     *
     * @return The current connection state
     */
-   public synchronized int getState()
+   public synchronized State getState()
    {
       return mState;
    }
@@ -117,6 +120,8 @@ public class BluetoothComms extends Service
          mSecureAcceptThread = new BluetoothAcceptThread();
          mSecureAcceptThread.start();
       }
+      this.setState(State.LISTEN);
+
       // TODO Insecure accept thread?
    }
 
@@ -130,7 +135,7 @@ public class BluetoothComms extends Service
       Log.i(TAG, "Connecting to: " + device);
 
       // Cancel any current connection attempts.
-      if(mState == STATE_CONNECTING)
+      if(mState == State.CONNECTING)
       {
          if(mConnectThread != null)
          {
@@ -148,7 +153,7 @@ public class BluetoothComms extends Service
       // Start the thread to connect to the target device
       mConnectThread = new BluetoothConnectThread(device);
       mConnectThread.start();
-      setState(STATE_CONNECTING);
+      setState(State.CONNECTING);
    }
 
    /**
@@ -192,7 +197,7 @@ public class BluetoothComms extends Service
       msg.setData(bundle);
       mHandler.sendMessage(msg);
 
-      setState(STATE_CONNECTED);
+      setState(State.CONNECTED);
    }
 
    /**
@@ -220,7 +225,7 @@ public class BluetoothComms extends Service
          mSecureAcceptThread = null;
       }
 
-      setState(STATE_NONE);
+      setState(State.NONE);
    }
 
    public void write(RobotMessage message)
@@ -229,7 +234,7 @@ public class BluetoothComms extends Service
       BluetoothConnectedThread r;
       synchronized (this)
       {
-         if (mState == STATE_CONNECTED)
+         if (mState == State.CONNECTED)
          {
             r = mConnectedThread;
          }
@@ -322,7 +327,7 @@ public class BluetoothComms extends Service
          BluetoothSocket socket = null;
 
          // Listen to the server socket if we're not connected
-         while (mState != STATE_CONNECTED)
+         while (mState != BluetoothComms.State.CONNECTED)
          {
             try
             {
@@ -332,7 +337,7 @@ public class BluetoothComms extends Service
             catch (IOException e)
             {
                // Failed to connect
-               Log.e(TAG, "accpet() failed", e);
+               Log.e(TAG, "accept() failed", e);
                break;
             }
 
@@ -344,15 +349,15 @@ public class BluetoothComms extends Service
                {
                   switch (mState)
                   {
-                     case STATE_LISTEN:
-                     case STATE_CONNECTING:
+                     case LISTEN:
+                     case CONNECTING:
                         // Start the connected thread.
                         // This is the normal execution path.
                         connected(socket, socket.getRemoteDevice());
                         break;
 
-                     case STATE_NONE:
-                     case STATE_CONNECTED:
+                     case NONE:
+                     case CONNECTED:
                         // Either not ready or already connected.
                         // Terminate new socket
                         try

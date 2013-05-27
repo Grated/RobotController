@@ -60,16 +60,17 @@ public class RobotControlActivity extends Activity implements BluetoothCommsList
          switch(msg.what)
          {
             case MESSAGE_STATE_CHANGE:
-               switch(msg.arg1)
+               BluetoothComms.State state = (BluetoothComms.State)(msg.obj);
+               switch(state)
                {
-                  case BluetoothComms.STATE_CONNECTED:
+                  case CONNECTED:
                      // Woohoo! Connected. Now what?
                      break;
-                  case BluetoothComms.STATE_CONNECTING:
+                  case CONNECTING:
                      // Something to do while connecting...
                      break;
-                  case BluetoothComms.STATE_LISTEN:
-                  case BluetoothComms.STATE_NONE:
+                  case LISTEN:
+                  case NONE:
                      // Something to do while not connected or waiting.
                      break;
                }
