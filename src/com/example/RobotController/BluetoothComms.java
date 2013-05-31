@@ -1,19 +1,15 @@
 package com.example.RobotController;
 
-import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
 import android.content.Context;
-import android.content.Intent;
-import android.os.*;
 import android.util.Log;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.ArrayList;
 import java.util.UUID;
 
 /**
@@ -23,8 +19,10 @@ import java.util.UUID;
  * Time: 9:57 PM
  *
  * Code based on the Bluetooth Chat sample provided with the Android SDK.
+ *
+ * This class runs threads that manage a connection with a remote device.
  */
-public class BluetoothComms extends Service
+public class BluetoothComms
 {
    // Used for tagging debug messages
    private static final String TAG = "BluetoothComms";
@@ -38,11 +36,12 @@ public class BluetoothComms extends Service
 
    // Member fields
    private final BluetoothAdapter mAdapter;
-   private final Handler mHandler;
-   private BluetoothAcceptThread mSecureAcceptThread;
-   private BluetoothConnectThread mConnectThread;
-   private BluetoothConnectedThread mConnectedThread;
+   private final BluetoothHelperHandler mHandler;
+   private AcceptThread mSecureAcceptThread;
+   private ConnectThread mConnectThread;
+   private ConnectedThread mConnectedThread;
    private State mState;
+   private Context mContext;
 
    // Constants that indicate the current connection state
    public enum State
@@ -53,19 +52,14 @@ public class BluetoothComms extends Service
       CONNECTED   // now connected to a remote device
    }
 
-   // Binder given to clients (part of being a service)
-   private final Binder binder = new LocalBinder();
-
-   // List of activities who care about connection events.
-   private final ArrayList<BluetoothCommsListener> listeners = new ArrayList<BluetoothCommsListener>();
-
    /**
     * Prepares a new bluetooth connection session.
     * @param context The UI activity context.
     * @param handler A handler to pass messages back to the UI activity.
     */
-   public BluetoothComms(Context context, Handler handler)
+   public BluetoothComms(Context context, BluetoothHelperHandler handler)
    {
+      this.mContext = context;
       this.mAdapter = BluetoothAdapter.getDefaultAdapter();
       this.mState = State.NONE;
       this.mHandler = handler;
@@ -73,13 +67,17 @@ public class BluetoothComms extends Service
 
    /**
     * Set the current state of the bluetooth connection.
-    * @param state An integer defining the current state.
+    * @param state The current connection state.
     */
    private synchronized void setState(State state)
    {
       Log.i(TAG, "setState() " + mState + " --> "+ state);
+
       mState = state;
-      mHandler.obtainMessage(RobotControlActivity.MESSAGE_STATE_CHANGE, -1, -1, state).sendToTarget();
+
+      // Pass the new state to the Handler so the UI activity can update.
+      mHandler.obtainMessage(
+         BluetoothHelperHandler.MessageType.STATE, -1, state).sendToTarget();
    }
 
    /**
@@ -92,8 +90,8 @@ public class BluetoothComms extends Service
    }
 
    /**
-    * Start the bluetooth connection.
-    * Starts a BluetoothAcceptThread in server mode.  Called by the activity
+    * Start the bluetooth connection. Starts AcceptThread to begin a session.
+    * Starts an AcceptThread in server mode.  Called by the activity
     * onResume()
     */
    public synchronized void start()
@@ -117,7 +115,7 @@ public class BluetoothComms extends Service
       // Start the thread to listen as a server
       if (mSecureAcceptThread == null)
       {
-         mSecureAcceptThread = new BluetoothAcceptThread();
+         mSecureAcceptThread = new AcceptThread();
          mSecureAcceptThread.start();
       }
       this.setState(State.LISTEN);
@@ -126,15 +124,15 @@ public class BluetoothComms extends Service
    }
 
    /**
-    * Called by the BluetoothAcceptThread when a connection has been accepted.
-    * Starts a BluetoothConnectThread to initiate a connection.
-    * @param device Device to connect.
+    * Called by the AcceptThread when a connection has been accepted.
+    * Starts a ConnectThread to initiate a connection.
+    * @param device Device to connect to.
     */
    public synchronized void connect(BluetoothDevice device)
    {
-      Log.i(TAG, "Connecting to: " + device);
+      Log.i(TAG, "Connect to: " + device);
 
-      // Cancel any current connection attempts.
+      // Cancel any threads attempting to make a connection.
       if(mState == State.CONNECTING)
       {
          if(mConnectThread != null)
@@ -144,6 +142,7 @@ public class BluetoothComms extends Service
          }
       }
 
+      // Cancel any thread currently running a connection.
       if(mConnectedThread != null)
       {
          mConnectedThread.cancel();
@@ -151,13 +150,13 @@ public class BluetoothComms extends Service
       }
 
       // Start the thread to connect to the target device
-      mConnectThread = new BluetoothConnectThread(device);
+      mConnectThread = new ConnectThread(device);
       mConnectThread.start();
       setState(State.CONNECTING);
    }
 
    /**
-    * Starts a BluetoothConnectedThread to begin managing a bluetooth connection.
+    * Starts a ConnectedThread to begin managing a bluetooth connection.
     * @param socket The BluetoothSocket on which the connection was made.
     * @param device The BluetoothDevice that has been connected.
     */
@@ -168,6 +167,8 @@ public class BluetoothComms extends Service
       // Cancel the thread that completed the connection
       if (mConnectThread != null)
       {
+         // TODO: Feels like a bad idea to close the socket we just opened and
+         // passed to here.
          mConnectThread.cancel();
          mConnectThread = null;
       }
@@ -187,15 +188,12 @@ public class BluetoothComms extends Service
       }
 
       // Start the thread to manage the connection and perform transmissions
-      mConnectedThread = new BluetoothConnectedThread(socket);
+      mConnectedThread = new ConnectedThread(socket);
       mConnectedThread.start();
 
       // Send the name of the connected device back to the UI Activity
-      Message msg = mHandler.obtainMessage(RobotControlActivity.MESSAGE_DEVICE_NAME);
-      Bundle bundle = new Bundle();
-      bundle.putString(RobotControlActivity.DEVICE_NAME, device.getName());
-      msg.setData(bundle);
-      mHandler.sendMessage(msg);
+      mHandler.obtainMessage(BluetoothHelperHandler.MessageType.DEVICE, -1,
+            device.getName()).sendToTarget();
 
       setState(State.CONNECTED);
    }
@@ -231,7 +229,7 @@ public class BluetoothComms extends Service
    public void write(RobotMessage message)
    {
       // Create temporary object
-      BluetoothConnectedThread r;
+      ConnectedThread r;
       synchronized (this)
       {
          if (mState == State.CONNECTED)
@@ -249,46 +247,13 @@ public class BluetoothComms extends Service
    }
 
    /**
-    * Indicate that the connection attempt failed and notify the UI Activity.
+    * Send an error message to the UI
     */
-   private void connectionFailed() {
-      // Send a failure message back to the Activity
-      Message msg = mHandler.obtainMessage(RobotControlActivity.MESSAGE_TOAST);
-      Bundle bundle = new Bundle();
-      bundle.putString(RobotControlActivity.TOAST, "Unable to connect device");
-      msg.setData(bundle);
-      mHandler.sendMessage(msg);
-
-      // Start the service over to restart listening mode
-      BluetoothComms.this.start();
-   }
-
-   /**
-    * Indicate that the connection was lost and notify the UI Activity.
-    */
-   private void connectionLost() {
-      // Send a failure message back to the Activity
-      Message msg = mHandler.obtainMessage(RobotControlActivity.MESSAGE_TOAST);
-      Bundle bundle = new Bundle();
-      bundle.putString(RobotControlActivity.TOAST, "Device connection was lost");
-      msg.setData(bundle);
-      mHandler.sendMessage(msg);
-
-      // Start the service over to restart listening mode
-      BluetoothComms.this.start();
-   }
-
-   @Override
-   public IBinder onBind(Intent intent)
+   private void sendErrorMessage(int messageId)
    {
-      return this.binder;
-   }
-
-   @Override
-   public void onDestroy()
-   {
-      // Do some clean up
-      stop();
+      setState(State.LISTEN);
+      mHandler.obtainMessage(BluetoothHelperHandler.MessageType.NOTIFY, -1,
+            mContext.getResources().getString(messageId)).sendToTarget();
    }
 
    /**
@@ -296,33 +261,33 @@ public class BluetoothComms extends Service
     * It behaves like a server-side client and runs until a connection is
     * accepted or cancel() is called.
     */
-   private class BluetoothAcceptThread extends Thread
+   private class AcceptThread extends Thread
    {
       // Local access to the device and socket
       private final BluetoothServerSocket mmServerSocket;
 
-      public BluetoothAcceptThread()
+      public AcceptThread()
       {
-         BluetoothServerSocket serverSocket = null;
+         BluetoothServerSocket tmp = null;
 
          // Create a new listening server socket
          try
          {
-            serverSocket = mAdapter.listenUsingRfcommWithServiceRecord(
-                  NAME_SECURE, MY_UUID_SECURE);
+            tmp = mAdapter.listenUsingRfcommWithServiceRecord(
+                     NAME_SECURE, MY_UUID_SECURE);
          }
          catch (IOException e)
          {
             Log.e(TAG, "Secure socket listen() failed", e);
          }
 
-         mmServerSocket = serverSocket;
+         mmServerSocket = tmp;
       }
 
       public void run()
       {
-         Log.i(TAG, "Begin BluetoothAcceptThead");
-         setName("BluetoothAcceptThread");
+         Log.i(TAG, "Begin mAcceptThead" + this);
+         setName("AcceptThread");
 
          BluetoothSocket socket = null;
 
@@ -344,7 +309,7 @@ public class BluetoothComms extends Service
             // If a connection was accepted
             if (socket != null)
             {
-               // TODO Why a lock here?
+               // Lock because we are accessing the state member variable.
                synchronized (BluetoothComms.this)
                {
                   switch (mState)
@@ -398,13 +363,13 @@ public class BluetoothComms extends Service
     * This thread runs while attempting to make a connection to a remote
     * device.
     */
-   private class BluetoothConnectThread extends Thread
+   private class ConnectThread extends Thread
    {
       // Local access to the device and socket
       private final BluetoothSocket mmSocket;
       private final BluetoothDevice mmDevice;
 
-      public BluetoothConnectThread(BluetoothDevice device)
+      public ConnectThread(BluetoothDevice device)
       {
          // UUID for bluetooth SPP protocol.
          // It's on the internet brah.
@@ -435,7 +400,7 @@ public class BluetoothComms extends Service
       {
          // Debuggery
          Log.i(TAG, "Starting connect thread");
-         setName("Bluetooth connect thread");
+         setName("Connect thread");
 
          // Cancel discovery because it will slow down the connection.
          BluetoothAdapter.getDefaultAdapter().cancelDiscovery();
@@ -459,7 +424,9 @@ public class BluetoothComms extends Service
                Log.e(TAG, "Could not close socket", closeException);
             }
 
-            // This place smells funny.
+            // Start the service over to restart listening mode.
+            BluetoothComms.this.start();
+
             return;
          }
 
@@ -478,6 +445,7 @@ public class BluetoothComms extends Service
          } catch (IOException e)
          {
             // doh
+            Log.i(TAG, "Close() of connect socket failed", e);
          }
       }
    } // end class ConnectThread
@@ -485,19 +453,22 @@ public class BluetoothComms extends Service
    /**
     * This thread runs while there is an active connection with a remote
     * device.
+    *
+    * This thread handles all incoming and outgoing transmissions.
     */
-   private class BluetoothConnectedThread extends Thread
+   private class ConnectedThread extends Thread
    {
       private final BluetoothSocket mmSocket;
       private final InputStream mmInStream;
       private final OutputStream mmOutStream;
 
-      public BluetoothConnectedThread(BluetoothSocket socket)
+      public ConnectedThread(BluetoothSocket socket)
       {
          mmSocket = socket;
          InputStream tmp_in = null;
          OutputStream tmp_out = null;
 
+         // Get the bluetooth socket input and output streams.
          try
          {
             tmp_in = socket.getInputStream();
@@ -516,7 +487,7 @@ public class BluetoothComms extends Service
       {
          Log.i(TAG, "Beginning background bluetooth comms");
 
-         int num_bytes = 0;
+         int num_bytes;
          byte[] buffer = new byte[1024];
 
          // As long as we are still connected keep listening for messages
@@ -526,14 +497,13 @@ public class BluetoothComms extends Service
             try
             {
                num_bytes = this.mmInStream.read(buffer);
-               mHandler.obtainMessage(RobotControlActivity.MESSAGE_READ,
-                     num_bytes, -1, buffer).sendToTarget();
+               mHandler.obtainMessage(BluetoothHelperHandler.MessageType.READ,
+                     num_bytes, buffer).sendToTarget();
             }
             catch (IOException e)
             {
                Log.e(TAG, "Disconnected", e);
-               connectionLost();
-               BluetoothComms.this.start();
+               sendErrorMessage(R.string.bt_connection_lost);
                break;
             }
          }
@@ -549,7 +519,8 @@ public class BluetoothComms extends Service
          {
             byte[] msg = message.packMessage();
             mmOutStream.write(msg);
-            mHandler.obtainMessage(RobotControlActivity.MESSAGE_WRITE, -1, -1, msg).sendToTarget();
+            mHandler.obtainMessage(BluetoothHelperHandler.MessageType.WRITE,
+                  -1, msg).sendToTarget();
          }
          catch (IOException e)
          {
@@ -568,31 +539,9 @@ public class BluetoothComms extends Service
          }
          catch (IOException e)
          {
-            Log.e(TAG, "Failed to close connection in BluetoothConnectedThread", e);
+            Log.e(TAG, "Failed to close connection in ConnectedThread", e);
          }
       }
 
    }
-
-   /**
-    * Client binder class
-    */
-   private class LocalBinder extends Binder
-   {
-      public BluetoothComms getService()
-      {
-         return BluetoothComms.this;
-      }
-
-      public void registerListener(BluetoothCommsListener listener)
-      {
-         listeners.add(listener);
-      }
-
-      public void unregisterListener(BluetoothCommsListener listener)
-      {
-         listeners.remove(listener);
-      }
-   }
-
 }

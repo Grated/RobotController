@@ -1,9 +1,11 @@
 package com.example.RobotController;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.util.Log;
 
 /**
  * Created with IntelliJ IDEA.
@@ -12,21 +14,21 @@ import android.os.Message;
  * Time: 7:06 PM
  * To change this template use File | Settings | File Templates.
  */
-public class RobotControlActivity extends Activity implements BluetoothCommsListener
+public class RobotControlActivity extends Activity
 {
-   // Message types sent from the BluetoothComms Handler
-   public static final int MESSAGE_STATE_CHANGE = 1;
-   public static final int MESSAGE_READ = 2;
-   public static final int MESSAGE_WRITE = 3;
-   public static final int MESSAGE_DEVICE_NAME = 4;
-   public static final int MESSAGE_TOAST = 5;
+   // Debugging
+   private static final String TAG = "RobotControl";
 
    // Key names received from the BluetoothChatService Handler
    public static final String DEVICE_NAME = "device_name";
    public static final String TOAST = "toast";
 
+   // Maintains bluetooth connection
+   private BluetoothComms comm = null;
+
    /**
     * Called when the activity is first created.
+    *
     * @param savedInstanceState
     */
    @Override
@@ -34,6 +36,14 @@ public class RobotControlActivity extends Activity implements BluetoothCommsList
    {
       super.onCreate(savedInstanceState);
       setContentView(R.layout.control);
+
+      // Create connection handler
+      comm = new BluetoothComms(this, mHandler);
+
+      // Get the message from the intent
+      Intent intent = getIntent();
+      String message = intent.getStringExtra(MainActivity.EXTRA_DEVICE);
+      Log.i(TAG, "Received message: " + message);
    }
 
    @Override
@@ -51,51 +61,77 @@ public class RobotControlActivity extends Activity implements BluetoothCommsList
 
    }
 
-   // The handler that gets information back from the BlutoothComms
-   private final Handler mHandler = new Handler()
+   // The Handler that gets information back from the BluetoothChatService
+   private final BtHelperHandler mHandler = new BtHelperHandler()
    {
       @Override
       public void handleMessage(Message msg)
       {
-         switch(msg.what)
+         BtHelperHandler.MessageType messageType =
+               BtHelperHandler.MessageType.values()[msg.what];
+         switch (messageType)
          {
-            case MESSAGE_STATE_CHANGE:
-               BluetoothComms.State state = (BluetoothComms.State)(msg.obj);
-               switch(state)
+            case STATE:
+               stateChanged((BtSPPHelper.State) msg.obj);
+               break;
+            case WRITE:
+               byte[] writeBuf = (byte[]) msg.obj;
+               // construct a string from the buffer
+               String writeMessage = new String(writeBuf);
+               mConversationArrayAdapter.add("Me:  " + writeMessage);
+               break;
+            case READ:
+               byte[] readBuf = (byte[]) msg.obj;
+               // construct a string from the valid bytes in the buffer
+               String readMessage;
+               try
                {
-                  case CONNECTED:
-                     // Woohoo! Connected. Now what?
-                     break;
-                  case CONNECTING:
-                     // Something to do while connecting...
-                     break;
-                  case LISTEN:
-                  case NONE:
-                     // Something to do while not connected or waiting.
-                     break;
+                  readMessage = new String(readBuf, 0, msg.arg1, "UTF-16");
+               } catch (UnsupportedEncodingException e)
+               {
+                  // Should complain
+                  readMessage = "";
                }
+               mConversationArrayAdapter.add(mConnectedDeviceName + ":  "
+                     + readMessage);
                break;
-            case MESSAGE_WRITE:
+            case DEVICE:
+               // save the connected device's name
+               mConnectedDeviceName = (String) msg.obj;
+               Toast.makeText(getApplicationContext(),
+                     "Connected to " + mConnectedDeviceName,
+                     Toast.LENGTH_SHORT).show();
                break;
-            case MESSAGE_READ:
+            case NOTIFY:
+               Toast.makeText(getApplicationContext(), (String) msg.obj,
+                     Toast.LENGTH_SHORT).show();
                break;
-            case MESSAGE_DEVICE_NAME:
+         }
+      }
+
+      /*
+       * If the Handler got a state-changes message, process
+       * the new state here. We indicate current state in the
+       * title bar
+       */
+      private void stateChanged(BtSPPHelper.State state)
+      {
+         switch (state)
+         {
+            case CONNECTED:
+               mTitle.setText(R.string.title_connected_to);
+               mTitle.append(mConnectedDeviceName);
+               mConversationArrayAdapter.clear();
                break;
-            case MESSAGE_TOAST:
+            case CONNECTING:
+               mTitle.setText(R.string.title_connecting);
+               break;
+            case LISTEN:
+            case NONE:
+               mTitle.setText(R.string.title_not_connected);
                break;
          }
       }
    };
 
-   @Override
-   public void onConnect()
-   {
-      //To change body of implemented methods use File | Settings | File Templates.
-   }
-
-   @Override
-   public void onDisconnect()
-   {
-      //To change body of implemented methods use File | Settings | File Templates.
-   }
 }

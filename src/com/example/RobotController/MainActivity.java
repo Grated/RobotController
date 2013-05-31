@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Spinner;
@@ -12,9 +13,13 @@ import android.widget.Spinner;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MainActivity extends Activity implements BluetoothCommsListener
+public class MainActivity extends Activity
 {
-   public static final int MESSAGE_DEVICE = 0;
+   // Debugging
+   private static final String TAG = "MainActivity";
+
+   // Intent extra
+   public static String EXTRA_DEVICE = "device";
 
    // List of bluetooth devices
    List<BluetoothDevice> btoothDevices;
@@ -82,24 +87,24 @@ public class MainActivity extends Activity implements BluetoothCommsListener
 
    public void connectClicked(View view)
    {
+      Log.i(TAG, "connectClicked");
+
       // Get the BluetoothDevice object to start a connection with.
       Spinner spin = (Spinner) this.findViewById(R.id.btooth_devices_spinner);
       BluetoothDevice dev = this.btoothDevices.get(spin.getSelectedItemPosition());
 
       // Begin the connection process.
+      Intent intent = new Intent(MainActivity.this, RobotControlActivity.class);
+      intent.putExtra(EXTRA_DEVICE, dev.getAddress());
+      MainActivity.this.startActivity(intent);
 
    }
 
-   @Override
-   public void onConnect()
+   protected void onDestroy()
    {
-      // Switch to the remote control activity.
-      Intent intent = new Intent(this, RobotControlActivity.class);
-      startActivity(intent);
-   }
+      super.onDestroy();
 
-   @Override
-   public void onDisconnect()
-   {
+      // Make sure we're not doing discovery anymore.
+      // TODO: Cancel discovery
    }
 }

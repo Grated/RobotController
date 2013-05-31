@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">RobotController</string>
+   <string name="ctrl_activity">RobotControlActivity</string>
+   <string name="bt_connection_lost">Connection lost</string>
 </resources>
