@@ -235,8 +235,8 @@ public class BluetoothComms extends Service
       // Cancel the thread that completed the connection
       if (mConnectThread != null)
       {
-         // TODO: Feels like a bad idea to close the socket we just opened and
-         // passed to here.
+         // TODO: It's a bad idea to close the socket we just opened, what if
+         // we came from the accept thread?
          //mConnectThread.cancel();
          //mConnectThread = null;
       }
@@ -251,6 +251,8 @@ public class BluetoothComms extends Service
       // Cancel the accept thread because we only want to connect to one device.
       if (mSecureAcceptThread != null)
       {
+         // TODO: It's a bad idea to close the socket we just opened, what if
+         // we came from the connect thread?
          mSecureAcceptThread.cancel();
          mSecureAcceptThread = null;
       }
