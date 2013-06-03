@@ -1,30 +1,28 @@
 package com.example.RobotController;
 
 import android.app.Activity;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Message;
+import android.os.IBinder;
 import android.util.Log;
 
 /**
- * Created with IntelliJ IDEA.
+ * This class contains the primary remove control functions.
  * User: sgreenman
  * Date: 5/6/13
  * Time: 7:06 PM
- * To change this template use File | Settings | File Templates.
  */
-public class RobotControlActivity extends Activity
+public class RobotControlActivity extends Activity implements BluetoothCommsListener
 {
    // Debugging
-   private static final String TAG = "RobotControl";
+   private static final String TAG = "RobotController:RobotControl";
 
-   // Key names received from the BluetoothChatService Handler
-   public static final String DEVICE_NAME = "device_name";
-   public static final String TOAST = "toast";
-
-   // Maintains bluetooth connection
-   private BluetoothComms comm = null;
+   // Bluetooth connection
+   private BluetoothComms mBtoothComms;
+   private boolean bound = false;
 
    /**
     * Called when the activity is first created.
@@ -36,14 +34,6 @@ public class RobotControlActivity extends Activity
    {
       super.onCreate(savedInstanceState);
       setContentView(R.layout.control);
-
-      // Create connection handler
-      comm = new BluetoothComms(this, mHandler);
-
-      // Get the message from the intent
-      Intent intent = getIntent();
-      String message = intent.getStringExtra(MainActivity.EXTRA_DEVICE);
-      Log.i(TAG, "Received message: " + message);
    }
 
    @Override
@@ -51,7 +41,11 @@ public class RobotControlActivity extends Activity
    {
       super.onStart();
 
-      // Initiate a bluetooth connection with the specified device.
+      Log.i(TAG, "RobotControlActivity started");
+
+      // Bind with the BluetoothComms service
+      Intent intent = new Intent(this, BluetoothComms.class);
+      bindService(intent, connection, Context.BIND_AUTO_CREATE);
    }
 
    @Override
@@ -59,79 +53,54 @@ public class RobotControlActivity extends Activity
    {
       super.onStop();
 
+      Log.i(TAG, "RobotControlActivity stopped");
+
+      if (bound)
+      {
+         unbindService(connection);
+         bound = false;
+      }
    }
 
-   // The Handler that gets information back from the BluetoothChatService
-   private final BtHelperHandler mHandler = new BtHelperHandler()
+   private ServiceConnection connection = new ServiceConnection()
    {
       @Override
-      public void handleMessage(Message msg)
+      public void onServiceConnected(ComponentName componentName,
+                                     IBinder iBinder)
       {
-         BtHelperHandler.MessageType messageType =
-               BtHelperHandler.MessageType.values()[msg.what];
-         switch (messageType)
-         {
-            case STATE:
-               stateChanged((BtSPPHelper.State) msg.obj);
-               break;
-            case WRITE:
-               byte[] writeBuf = (byte[]) msg.obj;
-               // construct a string from the buffer
-               String writeMessage = new String(writeBuf);
-               mConversationArrayAdapter.add("Me:  " + writeMessage);
-               break;
-            case READ:
-               byte[] readBuf = (byte[]) msg.obj;
-               // construct a string from the valid bytes in the buffer
-               String readMessage;
-               try
-               {
-                  readMessage = new String(readBuf, 0, msg.arg1, "UTF-16");
-               } catch (UnsupportedEncodingException e)
-               {
-                  // Should complain
-                  readMessage = "";
-               }
-               mConversationArrayAdapter.add(mConnectedDeviceName + ":  "
-                     + readMessage);
-               break;
-            case DEVICE:
-               // save the connected device's name
-               mConnectedDeviceName = (String) msg.obj;
-               Toast.makeText(getApplicationContext(),
-                     "Connected to " + mConnectedDeviceName,
-                     Toast.LENGTH_SHORT).show();
-               break;
-            case NOTIFY:
-               Toast.makeText(getApplicationContext(), (String) msg.obj,
-                     Toast.LENGTH_SHORT).show();
-               break;
-         }
+         BluetoothComms.LocalBinder binder =
+               (BluetoothComms.LocalBinder)iBinder;
+         mBtoothComms = binder.getService();
+         binder.registerListener(RobotControlActivity.this);
+         bound = true;
       }
 
-      /*
-       * If the Handler got a state-changes message, process
-       * the new state here. We indicate current state in the
-       * title bar
-       */
-      private void stateChanged(BtSPPHelper.State state)
+      @Override
+      public void onServiceDisconnected(ComponentName componentName)
       {
-         switch (state)
-         {
-            case CONNECTED:
-               mTitle.setText(R.string.title_connected_to);
-               mTitle.append(mConnectedDeviceName);
-               mConversationArrayAdapter.clear();
-               break;
-            case CONNECTING:
-               mTitle.setText(R.string.title_connecting);
-               break;
-            case LISTEN:
-            case NONE:
-               mTitle.setText(R.string.title_not_connected);
-               break;
-         }
+         bound = false;
       }
    };
+
+   @Override
+   public void onConnect()
+   {
+      Log.i(TAG, "Connection made");
+   }
+
+   @Override
+   public void onDisconnect()
+   {
+      Log.i(TAG, "Connection lost");
+
+      // End this activity.
+      finish();
+   }
+
+   @Override
+   public void handleEvent(MessageType type, Object msg)
+   {
+      Log.i(TAG, "Event received: " + type);
+   }
 
 }

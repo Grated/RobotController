@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.BLUETOOTH"/>
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"/>
     <application android:label="@string/app_name" android:icon="@drawable/ic_launcher">
+        <service android:name=".BluetoothComms" />
         <activity android:name="MainActivity"
                   android:label="@string/app_name">
             <intent-filter>

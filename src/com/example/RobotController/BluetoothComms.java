@@ -1,15 +1,21 @@
 package com.example.RobotController;
 
+import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
 import android.content.Context;
+import android.content.Intent;
+import android.os.Binder;
+import android.os.Handler;
+import android.os.IBinder;
 import android.util.Log;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.UUID;
 
 /**
@@ -22,10 +28,10 @@ import java.util.UUID;
  *
  * This class runs threads that manage a connection with a remote device.
  */
-public class BluetoothComms
+public class BluetoothComms extends Service
 {
    // Used for tagging debug messages
-   private static final String TAG = "BluetoothComms";
+   private static final String TAG = "RobotController:BluetoothComms";
 
    // Name for the SDP record when creating server socket
    private static final String NAME_SECURE = "RobotContoller";
@@ -34,14 +40,21 @@ public class BluetoothComms
    private static final UUID MY_UUID_SECURE =
       UUID.fromString("fa87c0d0-afac-11de-8a39-0800200c9a66");
 
+   // Binder given to clients.
+   private final Binder binder = new LocalBinder();
+
+   // List of listeners.
+   protected ArrayList<BluetoothCommsListener> mListeners;
+
+   // Handler fot making UI changes from other threads.
+   private Handler handler = new Handler();
+
    // Member fields
-   private final BluetoothAdapter mAdapter;
-   private final BluetoothHelperHandler mHandler;
+   private BluetoothAdapter mAdapter;
    private AcceptThread mSecureAcceptThread;
    private ConnectThread mConnectThread;
    private ConnectedThread mConnectedThread;
    private State mState;
-   private Context mContext;
 
    // Constants that indicate the current connection state
    public enum State
@@ -52,17 +65,73 @@ public class BluetoothComms
       CONNECTED   // now connected to a remote device
    }
 
-   /**
-    * Prepares a new bluetooth connection session.
-    * @param context The UI activity context.
-    * @param handler A handler to pass messages back to the UI activity.
-    */
-   public BluetoothComms(Context context, BluetoothHelperHandler handler)
+   @Override
+   public IBinder onBind(Intent intent)
    {
-      this.mContext = context;
+      return this.binder;
+   }
+
+   @Override
+   public void onCreate()
+   {
+      this.mListeners = new ArrayList<BluetoothCommsListener>();
       this.mAdapter = BluetoothAdapter.getDefaultAdapter();
       this.mState = State.NONE;
-      this.mHandler = handler;
+   }
+
+   @Override
+   public void onDestroy()
+   {
+      this.stop();
+   }
+
+   private void notifyConnected()
+   {
+      handler.post(new Runnable()
+      {
+         @Override
+         public void run()
+         {
+            // Inform listeners that we are connected
+            for (BluetoothCommsListener l : mListeners)
+            {
+               l.onConnect();
+            }
+         }
+      });
+   }
+
+   private void notifyDisconnected()
+   {
+      handler.post(new Runnable()
+      {
+         @Override
+         public void run()
+         {
+            // Inform listeners that we are connected
+            for (BluetoothCommsListener l : mListeners)
+            {
+               l.onDisconnect();
+            }
+         }
+      });
+   }
+
+   private void sendMessage(final BluetoothCommsListener.MessageType type,
+                            final Object message)
+   {
+      handler.post(new Runnable()
+      {
+         @Override
+         public void run()
+         {
+            // Inform listeners that we are connected
+            for (BluetoothCommsListener l : mListeners)
+            {
+               l.handleEvent(type, message);
+            }
+         }
+      });
    }
 
    /**
@@ -75,9 +144,8 @@ public class BluetoothComms
 
       mState = state;
 
-      // Pass the new state to the Handler so the UI activity can update.
-      mHandler.obtainMessage(
-         BluetoothHelperHandler.MessageType.STATE, -1, state).sendToTarget();
+      // Pass the new state to listeners who might care.
+      sendMessage(BluetoothCommsListener.MessageType.STATE, state);
    }
 
    /**
@@ -94,7 +162,7 @@ public class BluetoothComms
     * Starts an AcceptThread in server mode.  Called by the activity
     * onResume()
     */
-   public synchronized void start()
+   protected synchronized void start()
    {
       Log.i(TAG, "BluetoothComms start");
 
@@ -124,7 +192,7 @@ public class BluetoothComms
    }
 
    /**
-    * Called by the AcceptThread when a connection has been accepted.
+    * Called when a new connection is desired.
     * Starts a ConnectThread to initiate a connection.
     * @param device Device to connect to.
     */
@@ -160,7 +228,7 @@ public class BluetoothComms
     * @param socket The BluetoothSocket on which the connection was made.
     * @param device The BluetoothDevice that has been connected.
     */
-   public synchronized void connected(BluetoothSocket socket, BluetoothDevice device)
+   protected synchronized void connected(BluetoothSocket socket, BluetoothDevice device)
    {
       Log.i(TAG, "Connected");
 
@@ -169,8 +237,8 @@ public class BluetoothComms
       {
          // TODO: Feels like a bad idea to close the socket we just opened and
          // passed to here.
-         mConnectThread.cancel();
-         mConnectThread = null;
+         //mConnectThread.cancel();
+         //mConnectThread = null;
       }
 
       // Cancel any threads running a current connection
@@ -191,9 +259,12 @@ public class BluetoothComms
       mConnectedThread = new ConnectedThread(socket);
       mConnectedThread.start();
 
+      // Notify listeners we have connected.
+      notifyConnected();
+
       // Send the name of the connected device back to the UI Activity
-      mHandler.obtainMessage(BluetoothHelperHandler.MessageType.DEVICE, -1,
-            device.getName()).sendToTarget();
+      // Pass the new state to listeners who might care.
+      sendMessage(BluetoothCommsListener.MessageType.DEVICE, device.getName());
 
       setState(State.CONNECTED);
    }
@@ -223,6 +294,9 @@ public class BluetoothComms
          mSecureAcceptThread = null;
       }
 
+      // Inform listeners that we have disconnected.
+      notifyDisconnected();
+
       setState(State.NONE);
    }
 
@@ -244,16 +318,6 @@ public class BluetoothComms
 
       // Perform write unsynchronized.
       r.write(message);
-   }
-
-   /**
-    * Send an error message to the UI
-    */
-   private void sendErrorMessage(int messageId)
-   {
-      setState(State.LISTEN);
-      mHandler.obtainMessage(BluetoothHelperHandler.MessageType.NOTIFY, -1,
-            mContext.getResources().getString(messageId)).sendToTarget();
    }
 
    /**
@@ -497,13 +561,13 @@ public class BluetoothComms
             try
             {
                num_bytes = this.mmInStream.read(buffer);
-               mHandler.obtainMessage(BluetoothHelperHandler.MessageType.READ,
-                     num_bytes, buffer).sendToTarget();
+               sendMessage(BluetoothCommsListener.MessageType.READ,
+                     buffer);
             }
             catch (IOException e)
             {
                Log.e(TAG, "Disconnected", e);
-               sendErrorMessage(R.string.bt_connection_lost);
+               notifyDisconnected();
                break;
             }
          }
@@ -519,8 +583,8 @@ public class BluetoothComms
          {
             byte[] msg = message.packMessage();
             mmOutStream.write(msg);
-            mHandler.obtainMessage(BluetoothHelperHandler.MessageType.WRITE,
-                  -1, msg).sendToTarget();
+            sendMessage(BluetoothCommsListener.MessageType.WRITE,
+                  message);
          }
          catch (IOException e)
          {
@@ -544,4 +608,27 @@ public class BluetoothComms
       }
 
    }
+
+   /**
+    * Class used for the client binder.
+    */
+   public class LocalBinder extends Binder
+   {
+      public BluetoothComms getService()
+      {
+         return BluetoothComms.this;
+      }
+
+      public void registerListener(BluetoothCommsListener listener)
+      {
+         mListeners.add(listener);
+      }
+
+      public void unregisterListener(BluetoothCommsListener listener)
+      {
+         mListeners.remove(listener);
+      }
+
+   }
+
 }

@@ -3,8 +3,12 @@ package com.example.RobotController;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.util.Log;
 import android.view.View;
 import android.widget.ArrayAdapter;
@@ -13,16 +17,17 @@ import android.widget.Spinner;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MainActivity extends Activity
+public class MainActivity extends Activity implements BluetoothCommsListener
 {
    // Debugging
-   private static final String TAG = "MainActivity";
-
-   // Intent extra
-   public static String EXTRA_DEVICE = "device";
+   private static final String TAG = "RobotController:MainActivity";
 
    // List of bluetooth devices
    List<BluetoothDevice> btoothDevices;
+
+   // Bluetooth connection
+   private BluetoothComms mBtoothComms;
+   private boolean bound = false;
 
    /**
     * Called when the activity is first created.
@@ -38,6 +43,10 @@ public class MainActivity extends Activity
    public void onStart()
    {
       super.onStart();
+
+      // Bind with the bluetooth connection service.
+      Intent intent = new Intent(this, BluetoothComms.class);
+      bindService(intent, connection, Context.BIND_AUTO_CREATE);
 
       Spinner spin = (Spinner) this.findViewById(R.id.btooth_devices_spinner);
 
@@ -85,19 +94,34 @@ public class MainActivity extends Activity
       spin.setAdapter(spinAdapter);
    }
 
+   @Override
+   public void onStop()
+   {
+      super.onStop();
+      if (bound)
+      {
+         unbindService(connection);
+         bound = false;
+      }
+   }
+
    public void connectClicked(View view)
    {
       Log.i(TAG, "connectClicked");
 
-      // Get the BluetoothDevice object to start a connection with.
-      Spinner spin = (Spinner) this.findViewById(R.id.btooth_devices_spinner);
-      BluetoothDevice dev = this.btoothDevices.get(spin.getSelectedItemPosition());
+      if (this.mBtoothComms != null)
+      {
+         // Get the BluetoothDevice object to start a connection with.
+         Spinner spin = (Spinner) this.findViewById(R.id.btooth_devices_spinner);
+         BluetoothDevice dev = this.btoothDevices.get(spin.getSelectedItemPosition());
 
-      // Begin the connection process.
-      Intent intent = new Intent(MainActivity.this, RobotControlActivity.class);
-      intent.putExtra(EXTRA_DEVICE, dev.getAddress());
-      MainActivity.this.startActivity(intent);
-
+         // Begin the connection process.
+         this.mBtoothComms.connect(dev);
+      }
+      else
+      {
+         Log.i(TAG, "Error: mBtoothComms not initialized, bound?: " + bound);
+      }
    }
 
    protected void onDestroy()
@@ -107,4 +131,47 @@ public class MainActivity extends Activity
       // Make sure we're not doing discovery anymore.
       // TODO: Cancel discovery
    }
+
+   @Override
+   public void onConnect()
+   {
+      // Switch to the remote control.
+      Intent intent = new Intent(MainActivity.this, RobotControlActivity.class);
+      MainActivity.this.startActivity(intent);
+   }
+
+   @Override
+   public void onDisconnect()
+   {
+      //To change body of implemented methods use File | Settings | File Templates.
+   }
+
+   @Override
+   public void handleEvent(MessageType type, Object msg)
+   {
+      //To change body of implemented methods use File | Settings | File Templates.
+   }
+
+   private ServiceConnection connection = new ServiceConnection()
+   {
+      @Override
+      public void onServiceConnected(ComponentName componentName,
+                                     IBinder iBinder)
+      {
+         Log.i(TAG, "Connected to BluetoothComms service");
+         BluetoothComms.LocalBinder binder =
+               (BluetoothComms.LocalBinder) iBinder;
+         mBtoothComms = binder.getService();
+         binder.registerListener(MainActivity.this);
+         bound = true;
+      }
+
+      @Override
+      public void onServiceDisconnected(ComponentName componentName)
+      {
+         Log.i(TAG, "Disconnected from BluetoothComms service");
+         bound = false;
+      }
+   };
+
 }

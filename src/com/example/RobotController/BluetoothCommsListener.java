@@ -9,6 +9,16 @@ package com.example.RobotController;
  */
 public interface BluetoothCommsListener
 {
+   public enum MessageType
+   {
+      STATE,
+      READ,
+      WRITE,
+      DEVICE,
+      NOTIFY
+   }
+
    public void onConnect();
    public void onDisconnect();
+   public void handleEvent(MessageType type, Object msg);
 }
