@@ -6,6 +6,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Point;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -18,6 +19,9 @@ import android.view.View;
  */
 public class JoystickView extends View implements View.OnTouchListener
 {
+   // Used for tagging debug messages
+   private static final String TAG = "RobotController:JoystickView";
+
    // Our wonderful paint object
    private Paint paint = new Paint();
 
@@ -36,22 +40,27 @@ public class JoystickView extends View implements View.OnTouchListener
    private float m_inner_x;
    private float m_inner_y;
 
+   // Connected device to send messages to.
+   private RobotControlActivity remote;
 
-   public JoystickView(Context context, AttributeSet attrs, int defStyle)
-   {
-      super(context, attrs, defStyle);
-      initMembers();
-   }
-
-   public JoystickView(Context context, AttributeSet attrs)
-   {
-      super(context, attrs);
-      initMembers();
-   }
-
-   public JoystickView(Context context)
+//   public JoystickView(Context context, AttributeSet attrs, int defStyle)
+//   {
+//      super(context, attrs, defStyle);
+//      initMembers();
+//   }
+//
+//   public JoystickView(Context context, AttributeSet attrs)
+//   {
+//      super(context, attrs);
+//      initMembers();
+//   }
+//
+   public JoystickView(Context context, RobotControlActivity remote)
    {
       super(context);
+
+      this.remote = remote;
+
       initMembers();
    }
 
@@ -68,6 +77,8 @@ public class JoystickView extends View implements View.OnTouchListener
    @Override
    protected void onSizeChanged(int newX, int newY, int oldX, int oldY)
    {
+      Log.i(TAG, "Size changed");
+
       // Set the circle size
       if(newX > newY)
       {
@@ -137,6 +148,11 @@ public class JoystickView extends View implements View.OnTouchListener
 
             // Tell the system to call onDraw()
             invalidate();
+
+            // Send the new coordinates.
+            int x_int = (int)(m_inner_x / m_in_radius);
+            int y_int = (int)(m_inner_y / m_in_radius);
+            sendNewPosition(x_int, y_int);
          }
       }
       else if (motionEvent.getActionMasked() == MotionEvent.ACTION_UP)
@@ -146,6 +162,7 @@ public class JoystickView extends View implements View.OnTouchListener
          m_inner_x = 0;
          m_inner_y = 0;
          invalidate();
+         sendNewPosition(0, 0);
       }
 
       return true;
@@ -179,6 +196,11 @@ public class JoystickView extends View implements View.OnTouchListener
       }
 
       return retval;
+   }
+
+   private void sendNewPosition(int x, int y)
+   {
+      remote.updateSpeed(x, y);
    }
 
 }

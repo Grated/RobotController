@@ -21,9 +21,15 @@ public class RobotMessage
 
    // 1 byte version
    // 2 bytes speed
-   // 2*MAX_STRING bytes LCD messages
+   // 2*(MAX_STRING+1) bytes LCD messages plus nul terminator
    // 1 byte checksum
-   private final static int MSG_SIZE = (1 + 2 + (2*MAX_LCD_LINE) + 1);
+   private final static int MSG_SIZE = (1 + 2 + (2*(MAX_LCD_LINE+1)) + 1);
+   private final static int VERSION_IDX = 0;
+   private final static int LSPEED_IDX = 1;
+   private final static int RSPEED_IDX = 2;
+   private final static int TOP_START = 3;
+   private final static int BOT_START = 20;
+   private final static int CSUM_IDX = MSG_SIZE - 1;
 
    private final String lcdTop;
    private final String lcdBot;
@@ -63,29 +69,41 @@ public class RobotMessage
          rightSpeed = MIN_SPEED;
       }
 
+      // TODO This can be cleaner
+
+      // Copy the version.
+      msg[VERSION_IDX] = VERSION;
+
       // Copy the speed values
-      msg[0] = (byte)leftSpeed;
-      msg[1] = (byte)rightSpeed;
+      msg[LSPEED_IDX] = (byte)leftSpeed;
+      msg[RSPEED_IDX] = (byte)rightSpeed;
+
+      // Loop iterator
+      int i;
 
       // Copy the top message
-      for (int i = 0; i < MAX_LCD_LINE && i < lcdTop.length(); i++)
+      for (i = TOP_START; i < MAX_LCD_LINE && i < lcdTop.length(); i++)
       {
-         msg[2 + i] = (byte)lcdTop.charAt(i);
+         msg[i] = (byte)lcdTop.charAt(i);
       }
+      // Null terminate
+      msg[i] = '\0';
 
       // Copy the bottom message
-      for (int i = 0; i < MAX_LCD_LINE && i < lcdBot.length(); i++)
+      for (i = BOT_START; i < MAX_LCD_LINE && i < lcdBot.length(); i++)
       {
-         msg[2 + MAX_LCD_LINE + i] = (byte)lcdBot.charAt(i);
+         msg[i] = (byte)lcdBot.charAt(i);
       }
+      // Null terminate
+      msg[i] = '\0';
 
       // Calculate the checksum
-      for (int i = 0; i < MSG_SIZE - 1; i++)
+      for (i = 0; i < MSG_SIZE - 1; i++)
       {
          checksum += msg[i];
       }
 
-      msg[MSG_SIZE-1] = checksum;
+      msg[CSUM_IDX] = checksum;
 
       return msg;
    }

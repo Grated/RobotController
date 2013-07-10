@@ -33,7 +33,6 @@ public class RobotControlActivity extends Activity implements BluetoothCommsList
    public void onCreate(Bundle savedInstanceState)
    {
       super.onCreate(savedInstanceState);
-      setContentView(R.layout.control);
    }
 
    @Override
@@ -73,6 +72,11 @@ public class RobotControlActivity extends Activity implements BluetoothCommsList
          mBtoothComms = binder.getService();
          binder.registerListener(RobotControlActivity.this);
          bound = true;
+
+         JoystickView view = new JoystickView(RobotControlActivity.this,
+               RobotControlActivity.this);
+         RobotControlActivity.this.setContentView(view);
+         view.requestFocus();
       }
 
       @Override
@@ -101,6 +105,17 @@ public class RobotControlActivity extends Activity implements BluetoothCommsList
    public void handleEvent(MessageType type, Object msg)
    {
       Log.i(TAG, "Event received: " + type);
+   }
+
+   public void updateSpeed(int x, int y)
+   {
+      Log.i(TAG, "Speed updated: " + x + ", " + y);
+
+      RobotMessage message;
+
+      message = new RobotMessage("From", "Android", x, y);
+
+      this.mBtoothComms.write(message);
    }
 
 }
